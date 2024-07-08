@@ -1,0 +1,179 @@
+import serial
+import tkinter as tk
+from tkinter import ttk
+from tkinter import font
+from PIL import Image, ImageTk
+import random
+
+# Set up the serial connection to the Arduino
+try:
+    ser = serial.Serial('COM3', 9600, timeout=1)  # Replace 'COM3' with the appropriate serial port
+except serial.SerialException as e:
+    print(f"Error opening serial port: {e}")
+    exit()
+
+# Function to read data from the Arduino
+def read_data():
+    try:
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()
+            print(f"Received line: {line}")  # Debug print to check received data
+            if "Fuel Level:" in line:
+                fuel_value = line.split(": ")[1]
+                print(f"Parsed Fuel Level Value: {fuel_value}")
+                update_fuel(fuel_value)
+            elif "Temperature:" in line:
+                temp_value = line.split(": ")[1]
+                print(f"Parsed Temperature Value: {temp_value}")
+                update_temperature(temp_value)
+            elif "Pressure:" in line:
+                pressure_value = line.split(": ")[1]
+                print(f"Parsed Pressure Value: {pressure_value}")
+                update_tire_pressures(pressure_value)
+                
+    except Exception as e:
+        print(f"Error reading data: {e}")
+    root.after(READ_INTERVAL, read_data)  # Schedule the function to be called again after 1 second
+
+# Function to update label with new text
+def update_label(label, new_text):
+    label.config(text=new_text)
+
+# Function to update fuel level
+def update_fuel(fuel_value):
+    update_label(fuel_label_value, fuel_value)
+
+# Function to update temperature
+def update_temperature(temp_value):
+    update_label(temp_label_value, temp_value)
+
+# Function to update tire pressures based on collected pressure data
+def update_tire_pressures(pressure_value):
+    update_label(front_left_value, pressure_value)
+    update_label(front_right_value, pressure_value)
+    update_label(rear_left_value, pressure_value)
+    update_label(rear_right_value, pressure_value)
+
+# Function to load icons
+def load_icon(file_path, size):
+    img = Image.open(file_path)
+    img = img.resize(size, Image.LANCZOS)
+    return ImageTk.PhotoImage(img)
+
+# Function to resize background image to fit the window
+def resize_bg(event):
+    new_width = event.width
+    new_height = event.height
+    bg_resized = bg_image.resize((new_width, new_height), Image.LANCZOS)
+    bg_photo_resized = ImageTk.PhotoImage(bg_resized)
+    canvas.create_image(0, 0, image=bg_photo_resized, anchor="nw")
+    canvas.bg_image = bg_photo_resized
+
+# Set up the GUI
+root = tk.Tk()
+root.title("Health Monitoring System")
+root.geometry("800x600")
+
+# Load the background image
+bg_image = Image.open('car.png')
+bg_photo = ImageTk.PhotoImage(bg_image)
+
+# Create a canvas for the background image
+canvas = tk.Canvas(root, width=800, height=600)
+canvas.pack(fill="both", expand=True)
+canvas.create_image(0, 0, image=bg_photo, anchor="nw")
+canvas.bind("<Configure>", resize_bg)
+
+# Load icons after initializing the root window
+icons = {
+    "fuel": load_icon('fuel.png', (50, 50)),
+    "temperature": load_icon('temp.png', (50, 50)),
+    "battery": load_icon('battery.png', (50, 50)),
+    "speed": load_icon('speed.png', (50, 50)),
+    "tire": load_icon('tire.png', (50, 50))
+}
+
+# Define a better color palette
+BG_COLOR = "#1E1E1E"
+FRAME_COLOR = "#333333"
+LABEL_COLOR = "#CCCCCC"
+VALUE_COLOR = "#00FF7F"
+TITLE_COLOR = "#00BFFF"
+
+# Create a frame for the sensor data
+mainframe = ttk.Frame(canvas, padding="10", style="MainFrame.TFrame")
+mainframe.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+style = ttk.Style()
+style.configure("TFrame", background=FRAME_COLOR)
+style.configure("TLabel", background=FRAME_COLOR, font=("Helvetica", 14), foreground=LABEL_COLOR)
+style.configure("ValueLabel.TLabel", background=FRAME_COLOR, font=("Helvetica", 20, "bold"), foreground=VALUE_COLOR)
+style.configure("MainFrame.TFrame", background=FRAME_COLOR, relief="raised", borderwidth=5)
+
+# Custom font for the labels
+custom_font = font.Font(family="Helvetica", size=20, weight="bold")
+
+# Title
+title = ttk.Label(mainframe, text="Real-time Health Monitoring System", font=("Helvetica", 24, "bold"), foreground=TITLE_COLOR, background=FRAME_COLOR)
+title.grid(row=0, column=0, columnspan=6, pady=10)
+
+# Function to create a sensor row
+def create_sensor_row(row, column, icon, label_text, frame):
+    icon_label = ttk.Label(frame, image=icons[icon], background=FRAME_COLOR)
+    icon_label.grid(row=row, column=column*3, padx=10, pady=10, sticky=tk.W)
+    text_label = ttk.Label(frame, text=label_text, style="TLabel")
+    text_label.grid(row=row, column=column*3+1, padx=10, pady=10, sticky=tk.W)
+    value_label = ttk.Label(frame, text="N/A", style="ValueLabel.TLabel")
+    value_label.grid(row=row, column=column*3+2, padx=10, pady=10, sticky=tk.E)
+    return value_label
+
+# Arrange icons and labels in a grid layout
+fuel_label_value = create_sensor_row(1, 0, "fuel", "Fuel Level: ", mainframe)
+temp_label_value = create_sensor_row(1, 1, "temperature", "Temperature: ", mainframe)
+speed_label_value = create_sensor_row(2, 0, "speed", "Speed: ", mainframe)
+battery_label_value = create_sensor_row(2, 1, "battery", "Battery: ", mainframe)
+
+# Create a separate frame for the tire pressures
+tire_frame = ttk.Frame(mainframe, style="MainFrame.TFrame")
+tire_frame.grid(row=4, column=0, columnspan=6, pady=20)
+
+def create_tire_row(frame, row, column, label_text):
+    icon_label = ttk.Label(frame, image=icons["tire"], background=FRAME_COLOR)
+    icon_label.grid(row=row, column=column*3, padx=10, pady=5, sticky=tk.W)
+    text_label = ttk.Label(frame, text=label_text, style="TLabel")
+    text_label.grid(row=row, column=column*3+1, padx=10, pady=5, sticky=tk.W)
+    value_label = ttk.Label(frame, text="N/A", style="ValueLabel.TLabel")
+    value_label.grid(row=row, column=column*3+2, padx=10, pady=5, sticky=tk.E)
+    return value_label
+
+front_left_value = create_tire_row(tire_frame, 0, 0, "Front Left Tire: ")
+front_right_value = create_tire_row(tire_frame, 0, 1, "Front Right Tire: ")
+rear_left_value = create_tire_row(tire_frame, 1, 0, "Rear Left Tire: ")
+rear_right_value = create_tire_row(tire_frame, 1, 1, "Rear Right Tire: ")
+
+# Function to update battery with random value
+def update_battery():
+    random_battery = random.randint(0, 100)
+    update_label(battery_label_value, f"{random_battery}%")
+    root.after(BATTERY_UPDATE_INTERVAL, update_battery)
+
+# Function to update speed with random value
+def update_speed():
+    random_speed = random.randint(0, 120)
+    update_label(speed_label_value, f"{random_speed} km/h")
+    root.after(SPEED_UPDATE_INTERVAL, update_speed)
+
+# Define constants for intervals
+READ_INTERVAL = 1000
+BATTERY_UPDATE_INTERVAL = 5000
+SPEED_UPDATE_INTERVAL = 3000
+
+# Initial call to read data from the Arduino
+root.after(READ_INTERVAL, read_data)
+
+# Initial calls to update simulated data
+root.after(READ_INTERVAL, update_battery)
+root.after(READ_INTERVAL, update_speed)
+
+# Start the GUI event loop
+root.mainloop()
